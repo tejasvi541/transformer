@@ -30,7 +30,7 @@ def get_or_build_tokenizer(config, ds, lang):
         tokenizer.normalizer = Lowercase()
         tokenizer.normalizer = NFKC()
 
-        trainer = WordLevelTrainer(special_tokens=["[UNK]", "[SEP]", "[PAD]", "[MASK]", "[SOS]", "[EOS]"], min_frequency=2)
+        trainer = WordLevelTrainer(special_tokens=["[UNK]", "[PAD]", "[SOS]", "[EOS]"], min_frequency=2)
         tokenizer.train_from_iterator(get_all_sentences(ds, lang), trainer)
 
         tokenizer.save(str(tokenizer_path))
