@@ -158,3 +158,118 @@ class Encoder(nn.Module):
             x = layer(x, src_mask)
         
         return self.norm(x)
+    
+class DecoderBlock(nn.Module):
+    def __init__(self, self_attention_block:MultiHeadAttention, src_attention_block:MultiHeadAttention, feed_forward_block:FeedForwardBlock, dropout:float):
+        super().__init__()
+        self.self_attention_block = self_attention_block
+        self.src_attention_block = src_attention_block
+        self.feed_forward_block = feed_forward_block
+        self.residual_connection = nn.ModuleList([ResidualConnection(dropout) for _ in range(3)])
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, x, encoder_out_memory, src_mask, tgt_mask):
+        # Apply the self Attention Block first
+
+        x = self.residual_connection[0](x, lambda x: self.self_attention_block(x, x, x, tgt_mask))
+
+        # Apply the Cross Attention Block
+
+        x = self.residual_block[0](x, lambda x : self.src_attention_block(x, encoder_out_memory, encoder_out_memory, src_mask))
+
+        # Apply the Feed Forward Block
+
+        x = self.residual_connection[2](x, self.feed_forward_block)
+        return x
+
+class Decoder(nn.Module):
+    def __init__(self, layers:nn.ModuleList):
+        super().__init__()
+        self.layers = layers
+        self.norm = LayerNormalisation()
+
+    def forward(self, x, encoder_out_memory, src_mask, tgt_mask):
+        
+        # Apply the decoder layers
+        for layer in self.layers:
+            x = layer(x, encoder_out_memory, src_mask, tgt_mask)
+
+        return self.norm(x)
+    
+class ProjectionLayer(nn.Module):
+
+    def __init__(self, d_model:int, vocab_size:int):
+        super().__init__()
+        self.projection = nn.Linear(d_model, vocab_size)
+
+    def forward(self, x):
+        # (batch, seq_len, d_model) -> (batch, seq_len, vocab_size)
+        return torch.log_softmax(self.projection(x), dim = -1)
+    
+class Transformer(nn.Module):
+
+    def __init__(self, encoder:Encoder, decoder:Decoder, src_embed:InputEmbeddings, tgt_embed:InputEmbeddings, src_pos:PositionalEncoding, tgt_pos:PositionalEncoding, generator:ProjectionLayer):
+
+        super().__init__()
+        self.encoder = encoder
+        self.decoder = decoder
+        self.src_embed = src_embed
+        self.tgt_embed = tgt_embed
+        self.generator = generator
+        self.src_pos = src_pos
+        self.tgt_pos = tgt_pos
+
+    def encode(self, src, src_mask):
+        # (batch, seq_len) -> (batch, seq_len, d_model)
+        return self.encoder(self.src_pos(self.src_embed(src)), src_mask)
+        
+
+    def decode(self, encoder_out_memory, tgt, src_mask, tgt_mask):
+        # (batch, seq_len) -> (batch, seq_len, d_model)
+        return self.decoder(self.tgt_pos(self.tgt_embed(tgt)), encoder_out_memory, src_mask, tgt_mask)
+    
+    def project(self, x):
+        # (batch, seq_len, d_model) -> (batch, seq_len, vocab_size)
+        return self.generator(x)
+        
+def build_transformer(src_vocab_size:int , tarrget_vocab_size:int, src_seq_len:int, target_seq_len:int, d_model:int = 512, N:int = 6, num_heads:int = 8, d_ff:int = 2048, dropout:float = 0.1)->Transformer:
+    # Create the Input Embeddings
+    src_embed = InputEmbeddings(d_model, src_vocab_size)
+    tgt_embed = InputEmbeddings(d_model, tarrget_vocab_size)
+
+    # Create the Positional Encodings
+    src_pos = PositionalEncoding(d_model, src_seq_len, dropout)
+    tgt_pos = PositionalEncoding(d_model, target_seq_len, dropout)
+
+    # Create the Encoder
+    encoder_blocks = []
+
+    for _ in range(N):
+        encoder_blocks.append(EncoderBlock(MultiHeadAttention(d_model, num_heads, dropout), FeedForwardBlock(d_model, d_ff, dropout), dropout))
+    encoder = Encoder(nn.ModuleList(encoder_blocks))
+
+    # Create the Decoder
+    decoder_blocks = []
+    for _ in range(N):
+        decoder_self_attention = MultiHeadAttention(d_model, num_heads, dropout)
+        decoder_src_attention = MultiHeadAttention(d_model, num_heads, dropout)
+        decoder_block = DecoderBlock(decoder_self_attention, decoder_src_attention, FeedForwardBlock(d_model, d_ff, dropout), dropout)
+        decoder_blocks.append(decoder_block)
+    
+    decoder = Decoder(nn.ModuleList(decoder_blocks))
+
+    # Create the Generator/Projection Layer
+
+    projection = ProjectionLayer(d_model, tarrget_vocab_size)
+
+    # Create the Transformer
+    transformer = Transformer(encoder, decoder, src_embed, tgt_embed, src_pos, tgt_pos, projection)
+
+    # Init Parameters
+    for p in transformer.parameters():
+        if p.dim() > 1:
+            nn.init.xavier_uniform_(p)
+
+    return transformer
+
+print("Transformer Model is defined")
