@@ -8,6 +8,8 @@ from tokenizers.pre_tokenizers import Whitespace
 from tokenizers.normalizers import Lowercase, NFKC
 from pathlib import Path
 
+from dataset import BilingualDataset
+
 
 # To get for each example the translation in the target language
 def get_all_sentences(ds, lang):
@@ -52,4 +54,22 @@ def get_ds(config):
     val_ds_size = len(ds_raw) - train_ds_size
     train_ds_raw, val_ds_raw = torch.utils.data.random_split(ds_raw, [train_ds_size, val_ds_size])
 
+    train_ds = BilingualDataset(train_ds_raw, tokenizer_src, tokenizer_tgt, config["source_lang"], config["target_lang"], config["seq_len"])
+    val_ds = BilingualDataset(val_ds_raw, tokenizer_src, tokenizer_tgt, config["source_lang"], config["target_lang"], config["seq_len"])
+
+    max_len_src = 0
+    max_len_tgt = 0
+
+    for item in ds_raw:
+        src_ids = tokenizer_src.encode(item["translation"][config["source_lang"]]).ids
+        tgt_ids = tokenizer_tgt.encode(item["translation"][config["target_lang"]]).ids
+        max_len_src = max(max_len_src, len(src_ids))
+        max_len_tgt = max(max_len_tgt, len(tgt_ids))
+
+    print(f"Max length source: {max_len_src}")
+    print(f"Max length target: {max_len_tgt}")
+
+    train_dataloader = torch.utils.data.DataLoader(train_ds, batch_size=config["batch_size"], shuffle=True)
+    val_dataloader = torch.utils.data.DataLoader(val_ds, batch_size=1, shuffle=False)
     
+    return train_dataloader, val_dataloader, tokenizer_src, tokenizer_tgt
