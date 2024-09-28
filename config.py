@@ -21,7 +21,7 @@ def get_config():
         "batch_size": 8,  # Number of training examples per batch.
         "num_epochs": 20,  # Total number of training epochs.
         "lr": 10**-4,  # Learning rate for model training.
-        "seq_len": 350,  # Maximum length of input sequences for training.
+        "seq_len": 512,  # Maximum length of input sequences for training.
         "d_model": 512,  # Dimension of the model (e.g., hidden layer size in the transformer).
         "datasource": 'opus_books',  # Source of the dataset being used.
         "lang_src": "en",  # Source language for translation (English).
